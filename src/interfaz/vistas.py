@@ -58,26 +58,40 @@ def Disponibilidad():
         set_buscando(True)
         set_error("")
         
-        import httpx
+        from reactpy import html, event
         
-        async def fetch_hoteles():
+        @event(prevent_default=True)
+        async def fetch_hoteles_js(event):
             try:
-                response = await httpx.AsyncClient().get(
-                    f"/api/disponibilidad/?fecha={fecha}"
-                )
+                script = """
+                async function fetchData() {
+                    try {
+                        const baseUrl = window.location.origin;
+                        const response = await fetch(`${baseUrl}/api/disponibilidad/?fecha=${fecha}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            return {success: true, data: data};
+                        } else {
+                            return {success: false, error: `Error HTTP: ${response.status}`};
+                        }
+                    } catch (error) {
+                        return {success: false, error: error.toString()};
+                    }
+                }
+                return await fetchData();
+                """
+                result = await html.eval_js(script, fecha=fecha)
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    set_hoteles(data.get("hoteles_disponibles", []))
+                if result.get('success'):
+                    set_hoteles(result.get('data', {}).get('hoteles_disponibles', []))
                 else:
-                    set_error(f"Error al consultar disponibilidad: {response.status_code}")
+                    set_error(f"Error: {result.get('error', 'Desconocido')}")
             except Exception as e:
-                set_error(f"Error de conexión: {str(e)}")
+                set_error(f"Error: {str(e)}")
             finally:
                 set_buscando(False)
         
-        import asyncio
-        asyncio.create_task(fetch_hoteles())
+        fetch_hoteles_js()
     
     return html.div(
         {"class": "container-green"},
@@ -105,9 +119,10 @@ def Disponibilidad():
             )
         ),
         
+
         html.div({"style": {"color": "#ffcccc", "margin": "10px 0"}}, error) if error else None,
         
-        
+
         html.div(
             {"class": "results-container"},
             html.h3("Hoteles disponibles para la fecha seleccionada:"),
@@ -117,7 +132,7 @@ def Disponibilidad():
             ) if hoteles else html.p("No se han encontrado hoteles disponibles para esta fecha")
         ) if (hoteles or not buscando) and not error else None,
         
-        
+
         html.a(
             {
                 "href": "/tarifas",
